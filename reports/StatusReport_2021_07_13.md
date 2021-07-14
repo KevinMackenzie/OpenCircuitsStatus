@@ -1,4 +1,4 @@
-# Status Report, July 07, 2021
+# Status Report, July 13, 2021
 Project: Open Circuits
 
 ## This Week
