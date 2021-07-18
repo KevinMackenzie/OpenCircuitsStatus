@@ -159,17 +159,22 @@ For both of these use-cases, the "GCP Firstore in Datastore mode" is a good cand
 For developer machines, MongoDB can be used.
 
 ### Language
-Since the OT system needs to be implemented on both the front-end and the back-end, there are some shared operations.  The back-end logic is more complex for managing the log since it can have multiple clients connected.  I do no think there will be significant overlap in the back-end / front-end log management for it to be worth using WASM or writing the back-end component in TypeScript.
+Since the OT system needs to be implemented on the client-side and the server-side, there are _some_ shared operations.  However, the server-side logic is different enough from the client-side logic and the data structures the server-side logic can work with are so simple that there is no significant benefit from sharing code.
 
 Since we want the back-end to trim the log and accumulate a full base documet that it can serve to the client, both the front-end and back-end must have identical accumulate logic.  There are a few options:
 1. Write in Go and TypeScript
-	- BAD: inevitable inconsistencies
+	- BAD: inevitable inconsistencies & double the work at least
 1. WASM the Go code
-	- Not great: front-end needs strongly-typed access
+	- TERRIBLE: front-end needs strongly-typed access
 1. WASM the TypeScript code (AssemblyScript + Wasmer)
-	- Subset of TypeScript
+	- Subset (ish) of TypeScript
 	- No windows support (fine ...maybe)
+	- BAD: Not mature enough...
 1. Create an internal back-end service in TypeScript
-	- Communication overhead + frequency?
-		- Limit to every 5 seconds max
-	- This can also render the `Thumbnail`
+	- Communication overhead + frequency??
+
+The last option is definitely the least amount of work.  It enables using the full model in its original form and existing protocols.  It does require running a second service and the overhead of running NodeJS and the JS VM is significant, but it does not need to be called often.  The server never requires the entire document at once since there are no more _transformations_ (see [OT.md](./OT.md)).  This service can be invoked once a minimum time and minimum log entry count is achieved.
+
+The TS code can access the GCP log and GCP Document on its own to accumulate the document.  This will be done in two cases:
+- Milestone documents: so the whole log does not need to be re-played.  This can also render the thumbnails.
+- Server-side rendering (React): The milestone document and current log is loaded / replayed to construct the initial page the user sees

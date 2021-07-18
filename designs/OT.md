@@ -5,111 +5,91 @@ OpenCircuits has a graph-based model, which is different from the classical plai
 
 I propose to use an intent-preserving model, which dictates how to determine a *total order* from the *partial order* of the set of entries coming from all connected clients.  When two entries are *concurrent*, there is no way to determine which one *happened before* the other.  Network latency makes wall-clock time unreliable for creating a *total order* in an asynchronous system, but there is a centralized server that all clients communicate with, so a simple clock scheme will be used that just increments at every entry (Lamport Clocks).  The timestamp is the clock value paired with the client's `SessionID`.  These timestamps are partially ordered because two clients could submit an entry with the same clock value.
 
-The method for determining the total order could be in reverse-time-received order.  The server adds entries to the log as it receives them, but when an out-of-order entry is received, it gets added _before_ all other entries with the same clock.  This preserves the intent of the slowest client at the expense of changing what the faster clients see after-the-fact.  Not all entries will be commutative, so compromise must be made somewhere.  A maximum latency could be added so that grossly out-of-order entries are refused (i.e. >5 seconds).
+The entry received first for the log slot will be chosen first, then the second will be transformed against the first entry before being added immediately after.  This generalizes to any number of changes.  Luckly, most operations commute so this transformation will be simple.
 
-## Organizing a New Model
-To separate OT-based parts of the model from other parts of the model, I propose a new model broken down as follows:
-1. `Schematic`: Includes all OT components
-1. `Simulation`: The state of propagating signals in the system
-1. `Metadata`: The non-OT components for auxilliary information
+Ultimately, this system is not really Operational Transformations.  It is a simplification of distributed logs with a system model composed of a single authoritative server, and several connected clients which are not connected to eachother.
 
-The primary goal is to have as little of the model be involved in the OT algorithm as possible, so frequent changes to the schema do not require changing the algorithm often.  Furthermore, the algorithm does not need to accumulate the document itself to successfully merge intent.
+## The new Model
+The current model is non-trivial and is already reasonably-well setup for integrating into OT.  The OT code should not be brittle to changes in the model schema.  Log entries should be generic and compose Actions.  Each log entry will have a schema version number attached to it, so when schemas change, full migrations are not required.
 
-The `Schematic` a generic multi-graph where each node can have its own properties as key-value pairs.
-```C
-struct Schematic {
-	CircuitId id;
-	Set<Node> nodes;
-	Set<Edge> edges;
-	BidirMultiMap<(guid,fromPort), (guid,toPort)> edges;
-	...otherProps
-}
-struct Edge {
-	Guid guid;
-	Guid fromNode;
-	Guid fromPort;
-	Guid toNode;
-	Guid toPort;
-	...otherProps
-}
-struct Port {
-	Guid guid
-	...otherProps
-}
-struct Node {
-	Guid guid
-	Port ports[]
-	...otherProps { // All other stuff that isn't needed by OT
-		Transformation transformation;
+Actions cannot fail.  They must be very permissive.  All operations must serialize to primitive types (GUID's, not objects), so they can be transmitted uniformly.
+
+_Actions_ are the operations applied to the document.  _Entries_ are the representation stored in the log.  _Entries_ have slightly more information than _Actions_ do.
+
+```Haskell
+newtype GUID = Integer
+data Action 
+	= PlaceAction Component
+	| EraseAction GUID
+	| ...
+
+data LogEntry
+	= LogEntry {
+		clock :: Integer
+		clientId :: Integer
+		schemaVersion :: String
+		action :: Action
 	}
-}
 ```
-The `Port`s used in wires for shaping them would be `Node`s in this model with 1 input/output.
 
-## Log Entries
-Log entry types should be *orthagonal* and *minimal* to simplify the logic used to apply them.  The application of log entries should be permissive, so failed or partially failed entries do not break the state.  **Is there an algorithm for this, or is a do-your-best approach fine?**
-
-- AddNode
-- RemoveNodes
-- AddEdge
-- RemoveEdges
-- EditProps
-
-To avoid the additional complexity of OT for text, `EditProps` entries are atomic.  Two people changing the number of inputs on a multiplexer, for instance, will follow the intent-preserving procedure explained above.  However, this could be mitigated if the UI for Node/Edge properties updated in real-time when `EditProps` entries are received by the client.  Text-based OT is not critical for the usability of OpenCircuits.
-
-Additionally, `EditProps` may induce edge removals, like in the multiplexer input case, but these should not be added to the log explicitly.
-
-A prototype schema for these transformations is
-```C
-struct Entry {
-	union {
-		AddNode,
-		RemoveNodes,
-		AddEdge,
-		RemoveEdges,
-		EditProps
-	} entrySeq[]
-	Size clock
-	ClientID clientID
-	...otherData
-};
-struct AddNode {
-	Node node
+In reality, this will be represented like:
+```Go
+type Action struct {
+	actionType int
+	data []byte
 }
-struct RemoveNodes {
-	Guid nodes[];
-}
-struct AddEdge {
-	Edge edge;
-}
-struct RemoveEdges {
-	Guid edges[];
-}
-struct EditProp {
-	Guid object;
-	Pair<String, Any> upsertProps[]
-	String removeProps[]
+
+type LogEntry struct {
+	clock uint32
+	clientId uint32
+	schemaVersion uint32
+	action Action
 }
 ```
 
-Each entry may contain multiple entries in sequence that should be applied atomically.  We may find that this will only ever be size one.
+Actions here are singular, but GroupActions should be atomic and count as one Action just like in the history stack.
 
-## Managing Conflicting State
-Sometimes, the intent of the clients are at odds.  Specifically, the model for digital circuits prohibits multiple inputs on a single port.  If two users connect an input to the same port, which one should win?  I propose a relaxation of the model to _allow_ these kinds of conflicting state, but perhaps prevent simulation using it.  The problematic state could be highlighted in red or something to indicate a problem until one user fixes it.  Initially, the slowest client can win, as described above, and this can be added later
+One thing to consider is whether ports get GUID's, or if ports are just indexes on Components' GUID's.  The former works well because it won't ever connect a wire to a port that was deleted, or changed.  For IC's, if additional ports are added the wires will never connect to the wrong ports.
+
+## Server Logic
+When two operations are concurrent, the rule described above is that the _first_ entry received is accepted.  The server is really just a relay and an authoritative clock source.  It _may_ require some logic for transformations.  The server should have as little information about the model as possible to avoid code duplication.
+
+## Client Logic
+The client has to do its best to preserve its own intent while also abiding by the authoritative server source.  The client has two lists: _Pending_ for changes which have not been sent to the server, and _Sent_ for changes which have been sent but not ACK'd.  The rest of the details can be found in the medium article linked above.
+
+## Transformations
+The _Transformation_ of Operational Transformation is because text-based operations can affect the indices of later and yet-unknown operations, so entries have to be transformed against accepted changes to preserve the users' intents.  OpenCircuits is a canvas-based editor without a substantial textual component, so the problem of index-based text operations is not important.  All text operations can be sets, as opposed to inserts and deletes.
+
+The geometric transformations _should not_ compose.  It would be very confusing if two people moved the Component in the same direction and it shot off twice that distance.  So, similar to text operations, geometric transformations should be sets.
+
+Changing the number of inputs to a mux, encoder, etc. is a simple property set operation.  It wouldn't be desirable for this to be the composition of two events.
+
+The analog to insert/delete from the text-based editing example is adding/deleting wires / components.  These are operations that spawn independent objects into existance and delete them.  These operations are absolute because their intent is not affected by properties of other components and wires, so no transformation is required.
+
+Based on these three examples, actions that are _absolute_ do not require transformations while actions that are _relative_ do require transformations.  Furthermore, only non-desetricture _relative_ actions require transformations. Relative actions are:
+1. SplitWireAction: The user clicks on a wire and drags, which splits the wire into two and inserts a port in the middle.
+	- Solution?: Adjust the action so it includes a position, so it can find the wire closest to the chosen point, connected to the signal.  This helps preserve intent.
+2. SnipAction: The user deletes a port and merges the two wires together.
+	- Solution?: See above
+
+If no transformations are required, the server-side logic becomes very simple, and orthagonal to the client-side logic and the model logic.
+
+## Conflicting State?
+The model for digital circuits prohibits multiple inputs on a single port.  If two users connect an input to the same port, which one should win?  I propose a relaxation of the model to _allow_ these kinds of conflicting state, but perhaps prevent simulation using it.  The problematic state could be highlighted in red or something to indicate a problem until one user fixes it.  Initially, the slowest client can win, as described above, and this can be added later
 
 ## Invertability of Entries
-Since multiple clients can be working on the same part of the document as eachother, the *undo* operation becomes more difficult.  Each user should get their own *undo* stack, but simply inverting their log entries and applying them may not yield good results; an even worse solution would be to replay the log with that entry removed.
+Since multiple clients can be working on the same part of the document as eachother, the *undo* operation becomes more difficult.  Each user should get their own *undo* stack.  Rather, when a user performs "undo", it inverts the users' Actions and appends them to the log.  Actions in the _Pending_ list are just removed before the server gets them.
 
-Removing a node would implicitly delete some edges.  This can be solved by having *tombstones* on delete entries, but adding this to the OT algorithm could add significant complexity and make trimming the log more difficult.
+Removing a node would implicitly delete some edges.  This can be solved by having *tombstones* on entries.  Generalized, tombstones are on all destructive actions and can help numerical precision problems with geometric transformations.  These already exist on Actions.
 
-I propose that the *undo*/*redo* stack lives exclusively on the client and separate from the log.  Operations are already invertable, so it may be possible for that logic to be adapted to produce a sequence of log entries instead.  If these log entries are applied atomically, the *undo*/*redo* operation is a single intent.
-
-## Orphaned Props
-I believe it possible to keep a consistent `Schematic` that does not have any orphaned `Node`s or `Edge`s, the complexity of `...otherProps` makes it possible for some entries to leave behind orphaned props.  It probably is not decideable when these props are OK to remove, but it *may not matter*.  For example, a `Port4/Color` prop may be orphaned after `Port4` is deleted and a slow client changes the color.  Since the handler to apply the `EditProp` entry to a `Node` object cannot find a `Port4`, it does not get added to the `Schematic` model.  Since log entries applied in a total order, the `Port4/Color` prop gets discarded.
+Sometimes, undoing an operation may bring back zombie features, like wires connected to nothing.  I propose that Actions return a success/failure result of whether anything actually happened.  If nothing happens as a result of inverting the action, then it should not be sent to the server.  The next history item is undone / redone until it is empty or one is at least partially successful.
 
 ## Trimming Logs
-The log gets longer as more edits are made to it.  The entire log is not necessary to keep indefinitely.  On each operation, or periodically, the client sends the server the most recent entry it has received and any it is missing.  Once all clients have a log entry it can be removed.  Unfortunately, this is undecideable, so a compromise must be made.
+The log gets longer as more edits are made to it.  The entire log is not necessary to keep indefinitely.  On each operation, or periodically, the client sends the server the most recent entry it has received and any it is missing.  Once all clients have a log entry it could be removed.  However, this is undecideable and we want to keep a certain amount of log so that users' undo can be used even if the local changes are deleted.  We don't need to be in a hurry to delete log entries.
 
-Once all _active_ clients have a log entry, it can be removed.  An active client is one that has been participating in the algorithm recently (i.e. 5 minutes, 1 day).  This means the system model is _synchronous_.
+## In-Progress Actions
+Some actions have an in-progress view on the client and are not in the history stack.  Transforming components is the most obvious of these.  It would be cool if these in-progress actions showed up on collaborator's screens before the action is completed.  If, with rate limiting, these progress actions are added to the log, this is possible.  
 
-The current `Schematic` is constructed by applying the current entries to the most recent landmark `Schematic`.  
+Each incremental action could be non-invertable and ignored in the history stack, but the final Action would have the tombstone used to undo/redo the entire rotation at once.
+
+Two users transforming the same component would cause fighting, but that isn't a problem we need to solve.
