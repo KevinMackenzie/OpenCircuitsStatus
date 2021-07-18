@@ -40,7 +40,7 @@ The `LinkId` is used identically to the `CircuitId` and anonymizes the circuit f
 Each circuit has a list of `UserPermission`s and `LinkPermission`s and potentially some extra per-circuit data, like an `isPublic` flag used in a future public catelog feature.
 
 ### Storage
-The production environment will use GCP Firestore in Datastore mode.  This provides strong consistency at the expense of write performance, but Access will be read-dominated so it's OK.  The development environment will be MongoDB.  The `UserPermission` and `LinkPermission` types map well to the NoSQL model.
+The production environment will use GCP Firestore in Datastore mode.  This can provide strong consistency at the expense of write performance, but Access will be read-dominated so it's OK.  The development environment will be MongoDB.  The `UserPermission` and `LinkPermission` types map well to the NoSQL model.
 
 ### Interface
 The interface for the access subsystem, whether in-process or proxied, provides a set of capabilities for both editing the permissions of the circuits and for checking access.  `error`s will be from insufficient permission - internal errors will be `panic`s that induce 500-type errors.
