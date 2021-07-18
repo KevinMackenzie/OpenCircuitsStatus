@@ -107,13 +107,13 @@ type CircuitMetadata struct {
 ```
 The `ID`, which is a randomly-generated string, uniquely identifies a circuit.
 
-The `Thumbnail`, which is a b64-encoded image, needs to be replaced somehow because the clients will not be providing updated thumbnails for every edit operation.  These can be generated on-demand with a dedicated thumbnail rendering subsystem (i.e. `/thumbnail/<circuit-id>`) that uses the existing TypeScript logic.
+The `Thumbnail`, which is a b64-encoded image, needs to be replaced somehow because the clients will not be providing updated thumbnails for every edit operation.  These can be generated on-demand  & cached with a dedicated thumbnail rendering subsystem (i.e. `/thumbnail/<circuit-id>`) that uses the existing TypeScript logic.
 
 The `Owner` field is deprecated by the Access System, so it should be removed.  It may still be useful to know the owner.
 
 The `Version` field refers to the version of the schema that is used.  This will remain and continue to be used to update old circuits to new schemas.  This refers to the accumulated document, not the OT log, so accumulated documents will be migrated on-demand if the schema version in the database does not match the running version.  Old versions of the circuit, pre-migration, should be kept for safety.
 
-The `Name` and `Desc` fields _are_ metadata, but it would be good to include them in OT as a top-level property of the circuit since they are user-editable.  This avoids all out-of-band communication for document edits.
+The `Name` and `Desc` fields _are_ metadata, but it would be good to include them in OT as a top-level property of the circuit since they are user-editable.  This avoids all out-of-band communication for document edits.  These would be nice to fetch separately, so they will get their own columns
 
 ### Is Metadata Needed?
 The metadata will still be saved like before in the document, but with these fields removed
@@ -150,15 +150,15 @@ I intend on using Go to implement the back-end OT system because of its concurre
 ### Storage
 The log and the document have different storage needs.  The document can change relatively infrequently (i.e. max once per 5 seconds), but the log is constantly having entries added.  Since the concurrency model has one thread per document, all accesses to the storage system for a single document will be done by one thread.
 
-For the document, a strongly consistent model should be used so that log entries can be deleted once the write is successful.  However, the size of the document contents is not bounded.  There will be multiple documents with the same circuit ID in the case of migrations, so the Key for the document is not the same as the circuit id.
+For the document, a immediately consistent model is not required.  Documents are never edited and only the newest available version is usually fetched.  The size of the document contents is not bounded and may be multi-part.  There will be multiple documents with the same circuit ID, so the Key for the document is not the same as the circuit id.
 
-For the log, strong consistency is still desireable, but entries are added rapidly and removed periodically.  Entries are never editted (the total order is determined in-memory).
+For the log, immediate consistency is also not required.  Entries are added rapidly and removed periodically.  Entries are never editted.
 
-For both of these use-cases, the "GCP Firstore in Datastore mode" is a good candidate.  The caveat is that the document can be large and entries are limited to 1MB on GCP.  This means the document contents need to be multi-part.  The reduced write rate with strong consistency is per entry, so multi-part documents do not pose a problem.
+For both of these use-cases, the "GCP Firstore in Datastore mode" with eventual consistency is a good candidate.  The caveat is that the document can be large and entries are limited to 1MB on GCP.  This means the document contents need to be multi-part.
 
 For developer machines, MongoDB can be used.
 
-### Language
+### Language and Code Reuse
 Since the OT system needs to be implemented on the client-side and the server-side, there are _some_ shared operations.  However, the server-side logic is different enough from the client-side logic and the data structures the server-side logic can work with are so simple that there is no significant benefit from sharing code.
 
 Since we want the back-end to trim the log and accumulate a full base documet that it can serve to the client, both the front-end and back-end must have identical accumulate logic.  There are a few options:
@@ -175,6 +175,6 @@ Since we want the back-end to trim the log and accumulate a full base documet th
 
 The last option is definitely the least amount of work.  It enables using the full model in its original form and existing protocols.  It does require running a second service and the overhead of running NodeJS and the JS VM is significant, but it does not need to be called often.  The server never requires the entire document at once since there are no more _transformations_ (see [OT.md](./OT.md)).  This service can be invoked once a minimum time and minimum log entry count is achieved.
 
-The TS code can access the GCP log and GCP Document on its own to accumulate the document.  This will be done in two cases:
-- Milestone documents: so the whole log does not need to be re-played.  This can also render the thumbnails.
-- Server-side rendering (React): The milestone document and current log is loaded / replayed to construct the initial page the user sees
+The TS code does not have to access any GCP APIs.  The Go code can fetch the required data and send it along in the request.  This will be done in two cases:
+- Milestone documents: so the whole log does not need to be re-played.  This can also render the thumbnails.  This can be high latency.
+- Server-side rendering (React): The milestone document and current log is loaded / replayed to construct the initial page the user sees.  This should be low latency

@@ -9,30 +9,15 @@ The entry received first for the log slot will be chosen first, then the second 
 
 Ultimately, this system is not really Operational Transformations.  It is a simplification of distributed logs with a system model composed of a single authoritative server, and several connected clients which are not connected to eachother.
 
-## The new Model
+## The New Model
+### The Log
 The current model is non-trivial and is already reasonably-well setup for integrating into OT.  The OT code should not be brittle to changes in the model schema.  Log entries should be generic and compose Actions.  Each log entry will have a schema version number attached to it, so when schemas change, full migrations are not required.
 
 Actions cannot fail.  They must be very permissive.  All operations must serialize to primitive types (GUID's, not objects), so they can be transmitted uniformly.
 
-_Actions_ are the operations applied to the document.  _Entries_ are the representation stored in the log.  _Entries_ have slightly more information than _Actions_ do.
+_Actions_ are the operations applied to the document.  _Entries_ are the representation stored in the log.  _Entries_ have more information than _Actions_ do.
 
-```Haskell
-newtype GUID = Integer
-data Action 
-	= PlaceAction Component
-	| EraseAction GUID
-	| ...
-
-data LogEntry
-	= LogEntry {
-		clock :: Integer
-		clientId :: Integer
-		schemaVersion :: String
-		action :: Action
-	}
-```
-
-In reality, this will be represented like:
+For inter-op, this would be represented like:
 ```Go
 type Action struct {
 	actionType int
@@ -41,13 +26,19 @@ type Action struct {
 
 type LogEntry struct {
 	clock uint32
-	clientId uint32
+	clientId uint32 // Assigned by the server
 	schemaVersion uint32
 	action Action
 }
 ```
 
-Actions here are singular, but GroupActions should be atomic and count as one Action just like in the history stack.
+Actions here are singular, but GroupActions should be atomic and count as one Action in the log.
+
+
+### The Model
+The model will remain largely the same, but each distinguishable object gets GUID to identify it uniquely within the circuit in Log Entries.
+
+Actions will become complete permissive.  When deserializing an Action from an incoming log entry or applying an action with objects, if any of the GUIDs or any of the object's GUIDs are no longer in the circuit, the action fails.  **TODO**: Should the entire action fail atomically (GroupActions) or should each part be attempted?
 
 One thing to consider is whether ports get GUID's, or if ports are just indexes on Components' GUID's.  The former works well because it won't ever connect a wire to a port that was deleted, or changed.  For IC's, if additional ports are added the wires will never connect to the wrong ports.
 
@@ -68,7 +59,7 @@ The analog to insert/delete from the text-based editing example is adding/deleti
 
 Based on these three examples, actions that are _absolute_ do not require transformations while actions that are _relative_ do require transformations.  Furthermore, only non-desetricture _relative_ actions require transformations. Relative actions are:
 1. SplitWireAction: The user clicks on a wire and drags, which splits the wire into two and inserts a port in the middle.
-	- Solution?: Adjust the action so it includes a position, so it can find the wire closest to the chosen point, connected to the signal.  This helps preserve intent.
+	- Solution?: Adjust the action so it includes a position, so it can find the wire closest to the chosen point, connected to the signal.  The provided wire GUID is just a hint providing the attached signal.  This helps preserve intent.
 2. SnipAction: The user deletes a port and merges the two wires together.
 	- Solution?: See above
 
@@ -87,9 +78,16 @@ Sometimes, undoing an operation may bring back zombie features, like wires conne
 ## Trimming Logs
 The log gets longer as more edits are made to it.  The entire log is not necessary to keep indefinitely.  On each operation, or periodically, the client sends the server the most recent entry it has received and any it is missing.  Once all clients have a log entry it could be removed.  However, this is undecideable and we want to keep a certain amount of log so that users' undo can be used even if the local changes are deleted.  We don't need to be in a hurry to delete log entries.
 
+For example, log entries that are over a week old are deleted and entries over 2000 are deleted -- Of course, only if they have been also applied to the most recent milestone document.
+
 ## In-Progress Actions
 Some actions have an in-progress view on the client and are not in the history stack.  Transforming components is the most obvious of these.  It would be cool if these in-progress actions showed up on collaborator's screens before the action is completed.  If, with rate limiting, these progress actions are added to the log, this is possible.  
 
 Each incremental action could be non-invertable and ignored in the history stack, but the final Action would have the tombstone used to undo/redo the entire rotation at once.
 
 Two users transforming the same component would cause fighting, but that isn't a problem we need to solve.
+
+## Offline editing
+Offline editing will work perfectly fine.  The _Pending_ list will grow long as the user edits the circuit.  If this is stored in _LocalStorage_, or the modern equivalent, it can be loaded up and sent to the server when the client reconnects.
+
+It is OK for the client to be very out-of-date.  It may be the case that most of their operations got destroyed in the mean-time, but independent changes won't be affected.  Just a thought: For drastically diverging files, it could be nice to group sets of actions geometrically and offer a "keep mine, keep remote, merge" option to the user when just merging the changes could create a mess.
