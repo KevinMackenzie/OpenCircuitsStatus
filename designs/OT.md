@@ -1,4 +1,6 @@
 # Operational Transformation and the new Model
+This is a high-level document with considerations for the design of the OT subsystem.
+
 The principle of OT (see [This Article](https://medium.com/coinmonks/operational-transformations-as-an-algorithm-for-automatic-conflict-resolution-3bf8920ea447) for a good primer) is to model changes to a document as applying a set of operations, or *entries*, to a state thread, or *log*.  The whole document is recreated by applying the *log* in *total order*.  Editing documents across a distributed system entails conflicts in non-trivial scenarios, which are caused by unreliable network connections and connection latency.
 
 OpenCircuits has a graph-based model, which is different from the classical plain-text or JSON-based document models of other work in OT.  Since graphs are not ordered pieces of text, I believe it will be easier to implement.
@@ -6,8 +8,6 @@ OpenCircuits has a graph-based model, which is different from the classical plai
 I propose to use an intent-preserving model, which dictates how to determine a *total order* from the *partial order* of the set of entries coming from all connected clients.  When two entries are *concurrent*, there is no way to determine which one *happened before* the other.  Network latency makes wall-clock time unreliable for creating a *total order* in an asynchronous system, but there is a centralized server that all clients communicate with, so a simple clock scheme will be used that just increments at every entry (Lamport Clocks).  The timestamp is the clock value paired with the client's `SessionID`.  These timestamps are partially ordered because two clients could submit an entry with the same clock value.
 
 The entry received first for the log slot will be chosen first, then the second will be transformed against the first entry before being added immediately after.  This generalizes to any number of changes.  Luckly, most operations commute so this transformation will be simple.
-
-Ultimately, this system is not really Operational Transformations.  It is a simplification of distributed logs with a system model composed of a single authoritative server, and several connected clients which are not connected to eachother.
 
 ## The New Model
 ### The Log
@@ -17,7 +17,7 @@ Actions cannot fail.  They must be very permissive.  All operations must seriali
 
 _Actions_ are the operations applied to the document.  _Entries_ are the representation stored in the log.  _Entries_ have more information than _Actions_ do.
 
-For inter-op, this would be represented like:
+For inter-op, this would be represented something like:
 ```Go
 type Action struct {
 	actionType int
@@ -46,7 +46,7 @@ One thing to consider is whether ports get GUID's, or if ports are just indexes 
 When two operations are concurrent, the rule described above is that the _first_ entry received is accepted.  The server is really just a relay and an authoritative clock source.  It _may_ require some logic for transformations.  The server should have as little information about the model as possible to avoid code duplication.
 
 ## Client Logic
-The client has to do its best to preserve its own intent while also abiding by the authoritative server source.  The client has two lists: _Pending_ for changes which have not been sent to the server, and _Sent_ for changes which have been sent but not ACK'd.  The rest of the details can be found in the medium article linked above.
+The client has to do its best to preserve its own intent while also abiding by the authoritative server source.  The client has two lists: _Pending_ for changes which have not been sent to the server, and _Sent_ for changes which have been sent but not ACK'd.  The rest of the details can be found in [Algorithm.md](Algorithm.dm)
 
 ## Transformations
 The _Transformation_ of Operational Transformation is because text-based operations can affect the indices of later and yet-unknown operations, so entries have to be transformed against accepted changes to preserve the users' intents.  OpenCircuits is a canvas-based editor without a substantial textual component, so the problem of index-based text operations is not important.  All text operations can be sets, as opposed to inserts and deletes.
@@ -59,11 +59,9 @@ The analog to insert/delete from the text-based editing example is adding/deleti
 
 Based on these three examples, actions that are _absolute_ do not require transformations while actions that are _relative_ do require transformations.  Furthermore, only non-desetricture _relative_ actions require transformations. Relative actions are:
 1. SplitWireAction: The user clicks on a wire and drags, which splits the wire into two and inserts a port in the middle.
-	- Solution?: Adjust the action so it includes a position, so it can find the wire closest to the chosen point, connected to the signal.  The provided wire GUID is just a hint providing the attached signal.  This helps preserve intent.
+	- Transformation: If the parameter on the wire curve for the second event is after that of the first event, then change the second event to use the newly created wire from the first event.
 2. SnipAction: The user deletes a port and merges the two wires together.
-	- Solution?: See above
-
-If no transformations are required, the server-side logic becomes very simple, and orthagonal to the client-side logic and the model logic.
+	- Transformation: If the event is on the deleted wire, move it onto the other wire, adjusting parameter as requird.
 
 ## Conflicting State?
 The model for digital circuits prohibits multiple inputs on a single port.  If two users connect an input to the same port, which one should win?  I propose a relaxation of the model to _allow_ these kinds of conflicting state, but perhaps prevent simulation using it.  The problematic state could be highlighted in red or something to indicate a problem until one user fixes it.  Initially, the slowest client can win, as described above, and this can be added later
