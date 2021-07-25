@@ -52,7 +52,7 @@ Alternatively, the current _state_ of other's user interface can be transmitted 
 - Others?
 
 ## Additional Entry Information
-The `ProposeAction` message should contain a `SchemaVersion` so the server can reject messages from out-of-date clients.
+The `ProposeAction` message should contain a `SchemaVersion` so the server can reject messages from clients running out-of-date code.
 
 ## Joining the Network
 Clients join the network by establishing the WS connection as outlined in [DesignDoc.md](./DesignDoc.md).  Upon connecting, the client will send a message to the server with the latest clock it knows about and the server will respond with all entries that have been missed.  The server does not register the client as "live" and start sending it messages until the `JoinMessage` has been received to maintain the invariant that all live clients' logs are identical.
@@ -64,7 +64,7 @@ struct JoinMessage {
 }
 
 // Server sends the client all new entries
-struct WelcomMessage {
+struct WelcomeMessage {
     Entry entries[];
 }
 ```

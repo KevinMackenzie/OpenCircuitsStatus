@@ -9,7 +9,7 @@ The general idea is a distributed log with the following properties:
 One instance of the algorithm runs per-document.  All inter-document connections (i.e. ICs) are proxied through Components in the embedding documents.
 
 ## System Model
-The system is composed of a single server and any number of connected clients.  The connection between the clients is secured and authorized with a set of capabilities (view, edit, etc.?).  The connection is WebSockets, which are asynchronous, but do guarantee delivery and order.
+The system is composed of a single server and any number of connected clients.  The connection between the clients is secured and authorized with a set of capabilities (view, edit, etc.?).  The connection is WebSockets, which are synchronous, guarantee delivery, and guarantee order.  The synchronous property is only important for the liveness of clients.
 
 Clients may go offline for any reason (crash, internet connection, closing) without prior warning and can engage in Byzantine behavior.  Malicious edits to the document are not Byzantine, but violations of the protocol are.
 
@@ -18,7 +18,7 @@ The Server will never engage in Byzantine behavior.  It is a trusted node on the
 ## Log Model
 The log is an ordered list of Entries, which are composed of Actions and and some metadata (clock, schema version, user ID, etc).  The behavior of the log is independent of the contents of the Actions.
 
-The log also has a clock `logClock` which is the ID after the last log entry
+The log also has a `logClock` which is the clock of the _next_ log entry to be accepted.
 
 ## Document Model
 The document is as it currently is in OpenCircuits.  Actions will be updated so they fail silently when the current document state cannot support them.
@@ -105,8 +105,8 @@ func clientRecv(entry) {
     // The below code should be atomic so the UI isn't weird
 
     // Revert document back to log-state
-    doc.apply(reverse(invert(pending)))
-    doc.apply(reverse(invert(sent)))
+    doc.apply(invert(reverse(pending)))
+    doc.apply(invert(reverse(sent)))
 
     // Add entry to the log
     log.append(entry)
@@ -124,5 +124,5 @@ func clientRecv(entry) {
 ### Connection Failure
 While WS/TCP guarantees order / deliver of packets, the connection may time out or disconnect for some other reason.  In these cases, the WS connection is broken and the client must re-establish the connection, at which point it will receive all log entries that it has missed.
 
-## Possible Optimizations
-To start, the client will only have one copy of the document and the entire `pending` / `sent` list is undone, the new log entries are applied, and then then redone atomically (without updating the UI).  This could be slow or janky, so storing a second document that only contains the current Log state and re-building the working document from half-way in could help
+## Optimizations
+To start, the client will only have one copy of the document and the entire `pending` / `sent` list is undone, the new log entries are applied, and then then redone atomically (without updating the UI).  This could be slow or janky, so storing a second document that only contains the current Log state and re-building the working document from half-way in could help.

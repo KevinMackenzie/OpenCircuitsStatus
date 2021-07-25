@@ -37,7 +37,7 @@ type LinkPermission struct{
 
 The `LinkId` is used identically to the `CircuitId` and anonymizes the circuit from the users.  This allows share links to be revocable and the owner can generate new ones on demand.  These are translated in the routing layer of the Document Service.
 
-Each circuit has a list of `UserPermission`s and `LinkPermission`s and potentially some extra per-circuit data, like an `isPublic` flag used in a future public catelog feature.
+Each circuit has a list of `UserPermission`s and `LinkPermission`s and potentially some extra per-circuit data, like an `isPublic` flag used in a future public catalog feature.
 
 ### Storage
 The production environment will use GCP Firestore in Datastore mode.  This can provide strong consistency at the expense of write performance, but Access will be read-dominated so it's OK.  The development environment will be MongoDB.  The `UserPermission` and `LinkPermission` types map well to the NoSQL model.
@@ -133,9 +133,9 @@ There are two main concepts:
 This subsystem manages a set of WebSocket connections with clients.  Each authorized client gets its own secret `SessionID`, which is part of the WebSocket connection URL, used to route requests.  The initial implementation can expire `SessionID`s when the connection closes or after a fixed inactivity time to avoid storing them indefinitely.  These are only stored in memory.
 
 The protocol includes several types of information:
-1. Operational Transformation Entries
-1. Information about Other Users: Allow the user to see what the other users have selected
-2. Simulation State: Synchronize all users' simulation timing
+1. Operational Transformation Entries ([see this](./OTProtocol.md) for details)
+1. Information about Other Users: Allow the user to see what the other users have selected / are doing
+2. ~~Simulation State: Synchronize all users' simulation timing~~
 
 Initially only (1.) will be implemented.  (2.) and (3.) can be added at a later time.
 
@@ -173,7 +173,7 @@ Since we want the back-end to trim the log and accumulate a full base documet th
 1. Create an internal back-end service in TypeScript
 	- Communication overhead + frequency??
 
-The last option is definitely the least amount of work.  It enables using the full model in its original form and existing protocols.  It does require running a second service and the overhead of running NodeJS and the JS VM is significant, but it does not need to be called often.  The server never requires the entire document at once since there are no more _transformations_ (see [OT.md](./OT.md)).  This service can be invoked once a minimum time and minimum log entry count is achieved.
+The last option is definitely the least amount of work.  It enables using the full model in its original form and existing protocols.  It does require running a second service and the overhead of running NodeJS and the JS VM is significant, but it does not need to be called often.  The server never requires the entire document at once since  _transformations_ are always done on the client-side (see [OT.md](./OT.md)).  This service can be invoked once a minimum time and minimum log entry count is achieved.
 
 The TS code does not have to access any GCP APIs.  The Go code can fetch the required data and send it along in the request.  This will be done in two cases:
 - Milestone documents: so the whole log does not need to be re-played.  This can also render the thumbnails.  This can be high latency.
