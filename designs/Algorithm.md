@@ -66,6 +66,8 @@ func serverRecv(entry ProposeAction) {
 ### Client
 The client stores two additional lists separate from the Log.  The `sent` list contains entries that have been sent to the server, but haven't been ack'd yet.  The `pending` list contains entries that have not been sent yet.  The `sent` list has at most one element in it at a time.  The `pending` list can be any length.
 
+The client also has the global circuit document, `doc`, which actions can be applied to.
+
 
 ```go
 func clientAckHandler(aceptedClock) {
@@ -126,3 +128,12 @@ While WS/TCP guarantees order / deliver of packets, the connection may time out 
 
 ## Optimizations
 To start, the client will only have one copy of the document and the entire `pending` / `sent` list is undone, the new log entries are applied, and then then redone atomically (without updating the UI).  This could be slow or janky, so storing a second document that only contains the current Log state and re-building the working document from half-way in could help.
+
+### Log Trimming
+This is a necessary optimization to reduce the amount of space that documents use.  Transmitting the whole log is expensive because its size is linear in the number of edits, and not necessarily the size of the document.
+
+The clients need to store a certain amount of the log so they can perform transformations according to an entry's `proposedClock` and `acceptedClock`.  Determining when a log Entry can be safely deleted is undecideable because of these transformations.  The simplest heuristic is to keep a limited number of log Entries around and reject proposed entries that would be transformed by deleted entries.  Practically, this rejects proposed entries by slow clients in high-throughput documents.  How high the limit is determines how slow clients can be and how high-throughput documents can be and still accept proposed entries.
+
+The client could keep fewer entries than the server to save memory, but in cases where older entries are required for transformations, the server would have to send the missing entries as well as the new one.
+
+Because log entries can require transformation by previous log entries, they are not independent.  The location where the log can be trimmed must be disconnected.  This means logs for different documents get trimmed to different lengths, but I suspect exceptionally long logs require hand-crafted scenarios.  While some transformations may be the identity, the server is not aware of this property and is conservative.
