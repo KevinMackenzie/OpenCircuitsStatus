@@ -7,7 +7,7 @@ OpenCircuits has a graph-based model, which is different from the classical plai
 
 I propose to use an intent-preserving model, which dictates how to determine a *total order* from the *partial order* of the set of entries coming from all connected clients.  When two entries are *concurrent*, there is no way to determine which one *happened before* the other.  Network latency makes wall-clock time unreliable for creating a *total order* in an asynchronous system, but there is a centralized server that all clients communicate with, so a simple clock scheme will be used that just increments at every entry (Lamport Clocks).  The timestamp is the clock value paired with the client's `SessionID`.  These timestamps are partially ordered because two clients could submit an entry with the same clock value.
 
-The entry received first for the log slot will be chosen first, then the second will be transformed against the first entry before being added immediately after.  This generalizes to any number of changes.  Luckly, most operations commute so this transformation will be simple.
+The entry received first for the log slot will be chosen first, then the second will be transformed against the first entry before being added immediately after.  This generalizes to any number of changes.  Luckily, most operations commute so this transformation will be simple.
 
 ## The New Model
 ### The Log
@@ -55,26 +55,26 @@ The geometric transformations _should not_ compose.  It would be very confusing 
 
 Changing the number of inputs to a mux, encoder, etc. is a simple property set operation.  It wouldn't be desirable for this to be the composition of two events.
 
-The analog to insert/delete from the text-based editing example is adding/deleting wires / components.  These are operations that spawn independent objects into existance and delete them.  These operations are absolute because their intent is not affected by properties of other components and wires, so no transformation is required.
+The analog to insert/delete from the text-based editing example is adding/deleting wires / components.  These are operations that spawn independent objects into existence and delete them.  These operations are absolute because their intent is not affected by properties of other components and wires, so no transformation is required.
 
-Based on these three examples, actions that are _absolute_ do not require transformations while actions that are _relative_ do require transformations.  Furthermore, only non-desetricture _relative_ actions require transformations. Relative actions are:
+Based on these three examples, actions that are _absolute_ do not require transformations while actions that are _relative_ do require transformations.  Furthermore, only non-destructive _relative_ actions require transformations. Relative actions are:
 1. SplitWireAction: The user clicks on a wire and drags, which splits the wire into two and inserts a port in the middle.
 	- Transformation: If the parameter on the wire curve for the second event is after that of the first event, then change the second event to use the newly created wire from the first event.
 2. SnipAction: The user deletes a port and merges the two wires together.
-	- Transformation: If the event is on the deleted wire, move it onto the other wire, adjusting parameter as requird.
+	- Transformation: If the event is on the deleted wire, move it onto the other wire, adjusting parameter as required.
 
 ## Conflicting State?
 The model for digital circuits prohibits multiple inputs on a single port.  If two users connect an input to the same port, which one should win?  I propose a relaxation of the model to _allow_ these kinds of conflicting state, but perhaps prevent simulation using it.  The problematic state could be highlighted in red or something to indicate a problem until one user fixes it.  Initially, the slowest client can win, as described above, and this can be added later
 
 ## Invertability of Entries
-Since multiple clients can be working on the same part of the document as eachother, the *undo* operation becomes more difficult.  Each user should get their own *undo* stack.  Rather, when a user performs "undo", it inverts the users' Actions and appends them to the log.  Actions in the _Pending_ list are just removed before the server gets them.
+Since multiple clients can be working on the same part of the document as each other, the *undo* operation becomes more difficult.  Each user should get their own *undo* stack.  Rather, when a user performs "undo", it inverts the users' Actions and appends them to the log.  Actions in the _Pending_ list are just removed before the server gets them.
 
 Removing a node would implicitly delete some edges.  This can be solved by having *tombstones* on entries.  Generalized, tombstones are on all destructive actions and can help numerical precision problems with geometric transformations.  These already exist on Actions.
 
 Sometimes, undoing an operation may bring back zombie features, like wires connected to nothing.  I propose that Actions return a success/failure result of whether anything actually happened.  If nothing happens as a result of inverting the action, then it should not be sent to the server.  The next history item is undone / redone until it is empty or one is at least partially successful.
 
 ## Trimming Logs
-The log gets longer as more edits are made to it.  The entire log is not necessary to keep indefinitely.  On each operation, or periodically, the client sends the server the most recent entry it has received and any it is missing.  Once all clients have a log entry it could be removed.  However, this is undecideable and we want to keep a certain amount of log so that users' undo can be used even if the local changes are deleted.  We don't need to be in a hurry to delete log entries.
+The log gets longer as more edits are made to it.  The entire log is not necessary to keep indefinitely.  On each operation, or periodically, the client sends the server the most recent entry it has received and any it is missing.  Once all clients have a log entry it could be removed.  However, this is undecidable and we want to keep a certain amount of log so that users' undo can be used even if the local changes are deleted.  We don't need to be in a hurry to delete log entries.
 
 For example, log entries that are over a week old are deleted and entries over 2000 are deleted -- Of course, only if they have been also applied to the most recent milestone document.
 

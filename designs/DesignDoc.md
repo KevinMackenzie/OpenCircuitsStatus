@@ -152,7 +152,7 @@ The log and the document have different storage needs.  The document can change 
 
 For the document, a immediately consistent model is not required.  Documents are never edited and only the newest available version is usually fetched.  The size of the document contents is not bounded and may be multi-part.  There will be multiple documents with the same circuit ID, so the Key for the document is not the same as the circuit id.
 
-For the log, immediate consistency is also not required.  Entries are added rapidly and removed periodically.  Entries are never editted.
+For the log, immediate consistency is also not required.  Entries are added rapidly and removed periodically.  Entries are never edited.
 
 For both of these use-cases, the "GCP Firstore in Datastore mode" with eventual consistency is a good candidate.  The caveat is that the document can be large and entries are limited to 1MB on GCP.  This means the document contents need to be multi-part.
 
@@ -161,7 +161,7 @@ For developer machines, MongoDB can be used.
 ### Language and Code Reuse
 Since the OT system needs to be implemented on the client-side and the server-side, there are _some_ shared operations.  However, the server-side logic is different enough from the client-side logic and the data structures the server-side logic can work with are so simple that there is no significant benefit from sharing code.
 
-Since we want the back-end to trim the log and accumulate a full base documet that it can serve to the client, both the front-end and back-end must have identical accumulate logic.  There are a few options:
+Since we want the back-end to trim the log and accumulate a full base document that it can serve to the client, both the front-end and back-end must have identical accumulate logic.  There are a few options:
 1. Write in Go and TypeScript
 	- BAD: inevitable inconsistencies & double the work at least
 1. WASM the Go code

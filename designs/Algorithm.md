@@ -1,5 +1,5 @@
 # Collaboration Algorithm
-This document details the algorithm for OT to be used in OpenCicuits
+This document details the algorithm for OT to be used in OpenCircuits
 
 The general idea is a distributed log with the following properties:
 - Convergence: All copies of the log will be the same eventually
@@ -13,7 +13,7 @@ The system is composed of a single server and any number of connected clients.  
 
 Clients may go offline for any reason (crash, internet connection, closing) without prior warning and can engage in Byzantine behavior.  Malicious edits to the document are not Byzantine, but violations of the protocol are.
 
-The Server will never engage in Byzantine behavior.  It is a trusted node on the network that is the authoritative source of the log.
+The Server will never perform Byzantine behavior.  It is a trusted node on the network that is the authoritative source of the log.
 
 ## Log Model
 The log is an ordered list of Entries, which are composed of Actions and and some metadata (clock, schema version, user ID, etc).  The behavior of the log is independent of the contents of the Actions.
@@ -132,7 +132,7 @@ To start, the client will only have one copy of the document and the entire `pen
 ### Log Trimming
 This is a necessary optimization to reduce the amount of space that documents use.  Transmitting the whole log is expensive because its size is linear in the number of edits, and not necessarily the size of the document.
 
-The clients need to store a certain amount of the log so they can perform transformations according to an entry's `proposedClock` and `acceptedClock`.  Determining when a log Entry can be safely deleted is undecideable because of these transformations.  The simplest heuristic is to keep a limited number of log Entries around and reject proposed entries that would be transformed by deleted entries.  Practically, this rejects proposed entries by slow clients in high-throughput documents.  How high the limit is determines how slow clients can be and how high-throughput documents can be and still accept proposed entries.
+The clients need to store a certain amount of the log so they can perform transformations according to an entry's `proposedClock` and `acceptedClock`.  Determining when a log Entry can be safely deleted is undecidable because of these transformations.  The simplest heuristic is to keep a limited number of log Entries around and reject proposed entries that would be transformed by deleted entries.  Practically, this rejects proposed entries by slow clients in high-throughput documents.  How high the limit is determines how slow clients can be and how high-throughput documents can be and still accept proposed entries.
 
 The client could keep fewer entries than the server to save memory, but in cases where older entries are required for transformations, the server would have to send the missing entries as well as the new one.
 
