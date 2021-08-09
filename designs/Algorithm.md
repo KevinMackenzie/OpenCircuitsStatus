@@ -52,7 +52,7 @@ func serverRecv(entry ProposeAction) {
     log[lockClock] = entry
 
     // Acknowledge receiving the entry
-    ack(lockClock)
+    ack(logClock)
     
     // Update the log clock
     logClock++
