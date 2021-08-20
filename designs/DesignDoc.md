@@ -178,3 +178,5 @@ The last option is definitely the least amount of work.  It enables using the fu
 The TS code does not have to access any GCP APIs.  The Go code can fetch the required data and send it along in the request.  This will be done in two cases:
 - Milestone documents: so the whole log does not need to be re-played.  This can also render the thumbnails.  This can be high latency.
 - Server-side rendering (React): The milestone document and current log is loaded / replayed to construct the initial page the user sees.  This should be low latency
+
+![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png) This work is licensed under a http://creativecommons.org/licenses/by-nc-sa/4.0/ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.

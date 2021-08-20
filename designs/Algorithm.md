@@ -137,3 +137,5 @@ The clients need to store a certain amount of the log so they can perform transf
 The client could keep fewer entries than the server to save memory, but in cases where older entries are required for transformations, the server would have to send the missing entries as well as the new one.
 
 Because log entries can require transformation by previous log entries, they are not independent.  The location where the log can be trimmed must be disconnected.  This means logs for different documents get trimmed to different lengths, but I suspect exceptionally long logs require hand-crafted scenarios.  While some transformations may be the identity, the server is not aware of this property and is conservative.
+
+![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png) This work is licensed under a http://creativecommons.org/licenses/by-nc-sa/4.0/ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.

@@ -89,3 +89,5 @@ Two users transforming the same component would cause fighting, but that isn't a
 Offline editing will work perfectly fine.  The _Pending_ list will grow long as the user edits the circuit.  If this is stored in _LocalStorage_, or the modern equivalent, it can be loaded up and sent to the server when the client reconnects.
 
 It is OK for the client to be very out-of-date.  It may be the case that most of their operations got destroyed in the mean-time, but independent changes won't be affected.  Just a thought: For drastically diverging files, it could be nice to group sets of actions geometrically and offer a "keep mine, keep remote, merge" option to the user when just merging the changes could create a mess.
+
+![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png) This work is licensed under a http://creativecommons.org/licenses/by-nc-sa/4.0/ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
