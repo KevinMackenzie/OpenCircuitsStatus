@@ -6,7 +6,7 @@ My primary contributions are for building a back-end that supports circuit shari
 ##  Miscellaneous Contributions
 ### [Security bug fix](https://github.com/OpenCircuits/OpenCircuits/pull/670)
 This back-end bug allowed malicious actors with 3rd party google JWTs to impersonate an OpenCircuits user.
-### [Copy-on-save bug fix](https://github.com/OpenCircuits/OpenCircuits/pull/670)
+### [Copy-on-save bug fix](https://github.com/OpenCircuits/OpenCircuits/pull/672)
 This bug caused saving a circuit to sometimes create a duplicate rather than update the original
 
 ### [Feedback on boolean expression-parser](https://github.com/OpenCircuits/OpenCircuits/pull/630#pullrequestreview-669494926)
