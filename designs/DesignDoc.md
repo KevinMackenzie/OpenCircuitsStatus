@@ -1,3 +1,5 @@
+This document is the first-draft design of the new architecture and a preliminary discussion on how to handle data with operational transformation.
+
 # Backend Architecture
 The new design involves six main components split across several services.  Some components may be a separate service, potentially written in a different language.  The redesign breaks off the serving of static files from dynamic site features.  GCP should support this kind of basic routing, but the router can support static files as a fallback:
 - `/static`: points to static files
